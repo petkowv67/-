@@ -1,7 +1,4 @@
 import streamlit as st
-import easyocr
-import numpy as np
-from PIL import Image
 import re
 
 st.set_page_config(
@@ -9,121 +6,55 @@ st.set_page_config(
     layout="centered"
 )
 
-LANG = {
-    "bg": {
-        "title": "Скенер за хранителни съставки",
-        "upload": "Качи снимка",
-        "ocr_text": "Разпознат текст",
-        "dangerous": "Открити потенциално вредни съставки",
-        "safe": "Не са открити вредни съставки",
-        "processing": "Обработка..."
-    },
-    "en": {
-        "title": "Food Ingredient Scanner",
-        "upload": "Upload image",
-        "ocr_text": "Recognized text",
-        "dangerous": "Detected potentially harmful ingredients",
-        "safe": "No harmful ingredients found",
-        "processing": "Processing..."
-    }
-}
-
-language = st.sidebar.selectbox(
-    "Language / Език",
-    ["bg", "en"]
-)
-
-T = LANG[language]
-
-st.title(T["title"])
+st.title("🥫 Food Ingredient Scanner")
 
 harmful_ingredients = {
-    "e621": {
-        "bg": "E621 (мононатриев глутамат)",
-        "en": "E621 (Monosodium Glutamate)"
-    },
-    "palm oil": {
-        "bg": "Палмово масло",
-        "en": "Palm Oil"
-    },
-    "палмово масло": {
-        "bg": "Палмово масло",
-        "en": "Palm Oil"
-    },
-    "e250": {
-        "bg": "E250 (Натриев нитрит)",
-        "en": "E250 (Sodium Nitrite)"
-    },
-    "e951": {
-        "bg": "E951 (Аспартам)",
-        "en": "E951 (Aspartame)"
-    },
-    "aspartame": {
-        "bg": "Аспартам",
-        "en": "Aspartame"
-    },
-    "high fructose corn syrup": {
-        "bg": "Глюкозо-фруктозен сироп",
-        "en": "High Fructose Corn Syrup"
-    }
+    "e621": "E621 (Мононатриев глутамат)",
+    "e250": "E250 (Натриев нитрит)",
+    "e951": "E951 (Аспартам)",
+    "aspartame": "Аспартам",
+    "palm oil": "Палмово масло",
+    "палмово масло": "Палмово масло",
+    "high fructose corn syrup": "Глюкозо-фруктозен сироп",
+    "hydrogenated oil": "Хидрогенирани мазнини",
+    "trans fat": "Транс мазнини",
+    "e102": "Тартразин (E102)",
+    "e110": "Жълто FCF (E110)",
+    "e129": "Allura Red (E129)"
 }
 
-@st.cache_resource
-def load_reader():
-    return easyocr.Reader(['en'], gpu=False)
-
-try:
-    reader = load_reader()
-except Exception as e:
-    st.error(f"EasyOCR Error: {e}")
-    st.stop()
-
 uploaded_file = st.file_uploader(
-    T["upload"],
+    "Качи снимка на етикета",
     type=["jpg", "jpeg", "png"]
 )
 
-if uploaded_file is not None:
+if uploaded_file:
+    st.image(uploaded_file)
 
-    try:
-        image = Image.open(uploaded_file).convert("RGB")
+st.subheader("Постави текста от етикета")
 
-        st.image(image)
+ingredients_text = st.text_area(
+    "Съставки",
+    height=200
+)
 
-        with st.spinner(T["processing"]):
+if st.button("Провери съставките"):
 
-            img_array = np.array(image)
+    text = ingredients_text.lower()
 
-            results = reader.readtext(img_array)
+    found = []
 
-            extracted_text = " ".join(
-                [res[1] for res in results]
-            )
+    for ingredient, label in harmful_ingredients.items():
 
-            extracted_text_lower = extracted_text.lower()
+        if re.search(re.escape(ingredient), text):
+            found.append(label)
 
-            st.subheader(T["ocr_text"])
-            st.write(extracted_text)
+    st.subheader("Резултат")
 
-            found = []
+    if found:
 
-            for ingredient_key, labels in harmful_ingredients.items():
+        for item in sorted(set(found)):
+            st.error(f"⚠️ {item}")
 
-                if ingredient_key.lower() in extracted_text_lower:
-                    found.append(labels[language])
-
-            st.subheader(T["dangerous"])
-
-            if found:
-
-                for item in sorted(set(found)):
-                    st.error(f"⚠️ {item}")
-
-            else:
-                st.success(f"✅ {T['safe']}")
-
-    except Exception as e:
-        st.error(f"Processing error: {e}")
-
-st.markdown("---")
-st.caption("EasyOCR + Streamlit")
+    else:
+        st.success("✅ Не са открити проблемни съставки")
