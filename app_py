@@ -1,171 +1,44 @@
 import streamlit as st
-import numpy as np
 from PIL import Image
-import easyocr
+import pytesseract
 import re
 
-st.set_page_config(
-    page_title="Food Ingredient Scanner",
-    layout="centered"
-)
+st.title("Food Ingredient Scanner")
 
-# -----------------------------
-# Language dictionary
-# -----------------------------
-LANG = {
-    "bg": {
-        "title": "Скенер за хранителни съставки",
-        "upload": "Качи снимка",
-        "camera": "Направи снимка",
-        "ocr_text": "Разпознат текст",
-        "dangerous": "Открити потенциално вредни съставки",
-        "safe": "Не са открити вредни съставки",
-        "processing": "Обработка...",
-        "ocr_error": "Грешка при OCR обработката"
-    },
-    "en": {
-        "title": "Food Ingredient Scanner",
-        "upload": "Upload image",
-        "camera": "Take photo",
-        "ocr_text": "Recognized text",
-        "dangerous": "Detected potentially harmful ingredients",
-        "safe": "No harmful ingredients found",
-        "processing": "Processing...",
-        "ocr_error": "OCR processing error"
-    }
-}
-
-# -----------------------------
-# Sidebar
-# -----------------------------
-language = st.sidebar.selectbox(
-    "Language / Език",
-    ["bg", "en"]
-)
-
-T = LANG[language]
-
-st.title(T["title"])
-
-# -----------------------------
-# Ingredients database
-# -----------------------------
-harmful_ingredients = {
-    "e621": {
-        "bg": "E621 (мононатриев глутамат)",
-        "en": "E621 (Monosodium Glutamate)"
-    },
-    "e250": {
-        "bg": "E250 (Натриев нитрит)",
-        "en": "E250 (Sodium Nitrite)"
-    },
-    "e951": {
-        "bg": "E951 (Аспартам)",
-        "en": "E951 (Aspartame)"
-    },
-    "aspartame": {
-        "bg": "Аспартам",
-        "en": "Aspartame"
-    },
-    "palm oil": {
-        "bg": "Палмово масло",
-        "en": "Palm Oil"
-    },
-    "палмово масло": {
-        "bg": "Палмово масло",
-        "en": "Palm Oil"
-    },
-    "high fructose corn syrup": {
-        "bg": "Глюкозо-фруктозен сироп",
-        "en": "High Fructose Corn Syrup"
-    }
-}
-
-# -----------------------------
-# OCR Loader
-# -----------------------------
-@st.cache_resource
-def load_reader():
-    try:
-        return easyocr.Reader(["en"], gpu=False)
-    except Exception as e:
-        st.error(f"EasyOCR error: {e}")
-        return None
-
-reader = load_reader()
-
-if reader is None:
-    st.stop()
-
-# -----------------------------
-# Inputs
-# -----------------------------
 uploaded_file = st.file_uploader(
-    T["upload"],
+    "Upload image",
     type=["jpg", "jpeg", "png"]
 )
 
-camera_image = st.camera_input(T["camera"])
+harmful = [
+    "e621",
+    "e250",
+    "e951",
+    "aspartame",
+    "palm oil"
+]
 
-image = None
+if uploaded_file:
 
-if uploaded_file is not None:
     image = Image.open(uploaded_file)
 
-elif camera_image is not None:
-    image = Image.open(camera_image)
+    st.image(image)
 
-# -----------------------------
-# OCR Processing
-# -----------------------------
-if image is not None:
+    text = pytesseract.image_to_string(image)
 
-    try:
-        image = image.convert("RGB")
+    st.subheader("OCR Text")
+    st.write(text)
 
-        st.image(image)
+    text = text.lower()
 
-        with st.spinner(T["processing"]):
+    found = []
 
-            img_array = np.array(image)
+    for item in harmful:
+        if item in text:
+            found.append(item)
 
-            results = reader.readtext(img_array)
-
-            extracted_text = " ".join(
-                result[1] for result in results
-            )
-
-            extracted_text_lower = extracted_text.lower()
-
-            st.subheader(T["ocr_text"])
-            st.text_area(
-                "",
-                extracted_text,
-                height=200
-            )
-
-            found = []
-
-            for ingredient_key, labels in harmful_ingredients.items():
-
-                if re.search(
-                    re.escape(ingredient_key.lower()),
-                    extracted_text_lower
-                ):
-                    found.append(labels[language])
-
-            st.subheader(T["dangerous"])
-
-            if found:
-
-                for item in sorted(set(found)):
-                    st.error(f"⚠️ {item}")
-
-            else:
-                st.success(f"✅ {T['safe']}")
-
-    except Exception as e:
-        st.error(f"{T['ocr_error']}: {e}")
-
-st.markdown("---")
-st.caption("Powered by Streamlit + EasyOCR")
+    if found:
+        st.error("Detected:")
+        st.write(found)
+    else:
+        st.success("No harmful ingredients found")
