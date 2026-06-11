@@ -13,20 +13,18 @@ LANG = {
     "bg": {
         "title": "Скенер за хранителни съставки",
         "upload": "Качи снимка",
-        "camera": "Направи снимка",
         "ocr_text": "Разпознат текст",
         "dangerous": "Открити потенциално вредни съставки",
         "safe": "Не са открити вредни съставки",
-        "processing": "Обработка...",
+        "processing": "Обработка..."
     },
     "en": {
         "title": "Food Ingredient Scanner",
         "upload": "Upload image",
-        "camera": "Take photo",
         "ocr_text": "Recognized text",
         "dangerous": "Detected potentially harmful ingredients",
         "safe": "No harmful ingredients found",
-        "processing": "Processing...",
+        "processing": "Processing..."
     }
 }
 
@@ -72,61 +70,60 @@ harmful_ingredients = {
 
 @st.cache_resource
 def load_reader():
-    return easyocr.Reader(['bg', 'en'], gpu=False)
+    return easyocr.Reader(['en'], gpu=False)
 
-reader = load_reader()
+try:
+    reader = load_reader()
+except Exception as e:
+    st.error(f"EasyOCR Error: {e}")
+    st.stop()
 
 uploaded_file = st.file_uploader(
     T["upload"],
     type=["jpg", "jpeg", "png"]
 )
 
-camera_image = st.camera_input(T["camera"])
+if uploaded_file is not None:
 
-image = None
+    try:
+        image = Image.open(uploaded_file).convert("RGB")
 
-if uploaded_file:
-    image = Image.open(uploaded_file)
+        st.image(image)
 
-elif camera_image:
-    image = Image.open(camera_image)
+        with st.spinner(T["processing"]):
 
-if image is not None:
+            img_array = np.array(image)
 
-    st.image(image, use_container_width=True)
+            results = reader.readtext(img_array)
 
-    with st.spinner(T["processing"]):
+            extracted_text = " ".join(
+                [res[1] for res in results]
+            )
 
-        img_array = np.array(image)
+            extracted_text_lower = extracted_text.lower()
 
-        results = reader.readtext(img_array)
+            st.subheader(T["ocr_text"])
+            st.write(extracted_text)
 
-        extracted_text = " ".join([res[1] for res in results])
+            found = []
 
-        extracted_text_lower = extracted_text.lower()
+            for ingredient_key, labels in harmful_ingredients.items():
 
-        st.subheader(T["ocr_text"])
-        st.write(extracted_text)
+                if ingredient_key.lower() in extracted_text_lower:
+                    found.append(labels[language])
 
-        found = []
+            st.subheader(T["dangerous"])
 
-        for ingredient_key, labels in harmful_ingredients.items():
+            if found:
 
-            pattern = re.escape(ingredient_key.lower())
+                for item in sorted(set(found)):
+                    st.error(f"⚠️ {item}")
 
-            if re.search(pattern, extracted_text_lower):
-                found.append(labels[language])
+            else:
+                st.success(f"✅ {T['safe']}")
 
-        st.subheader(T["dangerous"])
-
-        if found:
-            unique_found = list(set(found))
-
-            for item in unique_found:
-                st.error(f"⚠️ {item}")
-
-        else:
-            st.success(f"✅ {T['safe']}")
+    except Exception as e:
+        st.error(f"Processing error: {e}")
 
 st.markdown("---")
 st.caption("EasyOCR + Streamlit")
